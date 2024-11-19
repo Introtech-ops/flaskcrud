@@ -5,6 +5,8 @@ import re
 import pdfplumber
 
 from flask_sqlalchemy import SQLAlchemy
+import os
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
@@ -18,9 +20,10 @@ products = [
 product_counter = len(products)+1
 
 app.secret_key = '67t5tgv7tgtyv?y7'
-openai.api_key = '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'
 
-# Dictionary of greetings and unique responses
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 greetings_dict = {
     'hello': 'Hello! How can I assist you today with the building code or any inquiries?',
     'hi': 'Hi there! What can I help you with?',

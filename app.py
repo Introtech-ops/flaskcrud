@@ -19,8 +19,7 @@ products = [
 
 product_counter = len(products)+1
 
-app.secret_key = '67t5tgv7tgtyv?y7'
-
+app.secret = os.getenv("APP_KEY")
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -134,7 +133,7 @@ def chat():
         return jsonify({'response': bot_response})
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error Exception': str(e)}), 500
 
 @app.route('/')
 def index():

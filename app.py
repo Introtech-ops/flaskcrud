@@ -152,7 +152,6 @@ def home():
 @app.route('/square/<int:num>', methods=['GET'])
 def square(num):
     return jsonify({'data': num**2})
-  
 
 @app.route('/product/add', methods=['GET', 'POST'])
 def add_product():
@@ -171,11 +170,9 @@ def add_product():
 
     return render_template('add_product.html')
         
-        
 @app.route('/ncabcllm', methods=['GET', 'POST'])
 def ncabc_llm():
     return render_template('ncabchat.html')
-        
         
 @app.route('/product/edit/<int:product_id>', methods=['GET', 'POST'])
 def edit_product(product_id):
@@ -206,6 +203,3 @@ def delete_product(product_id):
 
 if __name__ == "__main__":
     app.run(debug=True)
-    
-
-     

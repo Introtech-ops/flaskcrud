@@ -9,10 +9,14 @@ from langchain_community.vectorstores import FAISS
 # from langchain.llms import openai
 from langchain.prompts import PromptTemplate
 
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+
 import pdfplumber
 import os
 import logging
 import getpass
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,25 +26,56 @@ app = Flask(__name__)
 load_dotenv() 
 os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
 
-
-
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
-
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
 
 model = ChatOpenAI(model="gpt-4o-mini")
 
-
-# Cache for text chunks and vector store
 _cache = {
     "text_chunks": None,
     "vectorstore": None
 }
 
+greetings_dict = {
+    'hello': 'Hello! How can I assist you today with the building code or any inquiries?',
+    'hi': 'Hi there! What can I help you with?',
+    'greetings': 'Greetings! How may I be of service?',
+    'hey': 'Hey! What would you like to know about the building code?',
+    'good morning': 'Good morning! How can I help you today?',
+    'good evening': 'Good evening! What information are you looking for?',
+    'niaje': 'Niaje! How can I assist you?',
+    'vipi': 'Vipi! What do you need help with?',
+    'sasa': 'Sasa! Do you have any questions for me?',
+    'rieng': 'Rieng! Let me know how I can help you.'
+}
+
+## Function to check if the message contains a greeting and return a unique response
+def is_greeting(message):
+    message_lower = message.lower()
+    for greet, response in greetings_dict.items():
+        if greet in message_lower:
+            return response
+    return None
+
+# Function to check if the message makes sense (simple language validation)
+def validate_language(message):
+    if not re.match(r"^[a-zA-Z0-9\s.,!?']+$", message):
+        return False
+    return True
+
+# Function to reformat or prompt user if the message does not make sense
+def reformat_message(message):
+    if not validate_language(message):
+        return "Your message seems unclear. Could you please rephrase it?"
+    return message
+
+# Function to search for relevant sections in the building code
+def search_building_code(query, document_text):
+    results = [line for line in document_text.split('\n') if query.lower() in line.lower()]
+    return results if results else ["No relevant section found."]
+
 # Load and process the PDF content
-def load_nbc_content(pdf_path="National_Building_Code_2024.pdf"):
+def load_nbc_content(pdf_path="ncabc140.pdf"):
     try:
         with pdfplumber.open(pdf_path) as pdf:
             nbc_content = ""
@@ -52,11 +87,10 @@ def load_nbc_content(pdf_path="National_Building_Code_2024.pdf"):
         logging.error(f"Failed to load PDF: {e}")
         raise
 
-# Create embeddings and vector store (with caching)
 def create_vector_store(text_chunks):
-    if _cache['vectorstore']:
-        logging.info("Using cached vector store.")
-        return _cache['vectorstore']
+    # if _cache['vectorstore']:
+    #     logging.info("Using cached vector store.")
+    #     return _cache['vectorstore']
     
     logging.info("Creating new vector store...")
     embeddings = OpenAIEmbeddings()
@@ -64,7 +98,6 @@ def create_vector_store(text_chunks):
     _cache['vectorstore'] = vectorstore
     return vectorstore
 
-# Initialize text splitter
 def initialize_text_splitter():
     logging.info("Initializing text splitter...")
     return RecursiveCharacterTextSplitter(
@@ -73,7 +106,6 @@ def initialize_text_splitter():
         length_function=len
     )
 
-# Initialize QA chain
 def initialize_qa_chain():
     logging.info("Initializing QA chain...")
     prompt_template = """You are a helpful AI assistant specialized in the National Building Code 2024.
@@ -95,35 +127,70 @@ def initialize_qa_chain():
 
 # Initialize everything
 logging.info("Initializing the Building Code LLM system...")
+def reinitialize_system():
+    try:
+        logging.info("Reinitializing vector store...")
+        nbc_content = load_nbc_content()
+        text_splitter = initialize_text_splitter()
+        chunks = text_splitter.split_text(nbc_content)
+        _cache['text_chunks'] = chunks
+        vectorstore = create_vector_store(chunks)
+        logging.info("System reinitialized successfully.")
+        return vectorstore
+    except Exception as e:
+        logging.error(f"Reinitialization failed: {e}")
+        return None
 
-try:
-    nbc_content = load_nbc_content()
-    text_splitter = initialize_text_splitter()
-    chunks = text_splitter.split_text(nbc_content)
-    _cache['text_chunks'] = chunks
-    vectorstore = create_vector_store(chunks)
-    qa_chain = initialize_qa_chain()
-except Exception as e:
-    logging.error(f"Initialization failed: {e}")
+# try:
+#     nbc_content = load_nbc_content()
+#     text_splitter = initialize_text_splitter()
+#     chunks = text_splitter.split_text(nbc_content)
+#     _cache['text_chunks'] = chunks
+#     vectorstore = create_vector_store(chunks)
+#     qa_chain = initialize_qa_chain()
+# except Exception as e:
+#     logging.error(f"Initialization failed: {e}")
     
 @app.route('/api/chat', methods=['POST'])
 def chat():
     try:
+        if not request.is_json:
+            return jsonify({'error': 'Content-Type must be application/json'}), 415
+        
+        # Ensure vectorstore is initialized or re-initialized
+        if _cache['vectorstore'] is None:
+            logging.warning("Vectorstore is not initialized, attempting to reinitialize...")
+            vectorstore = reinitialize_system()
+            if vectorstore is None:
+                return jsonify({'error': 'Failed to reinitialize vectorstore. Please try again later.'}), 500
+        else:
+            vectorstore = _cache['vectorstore']
+
         data = request.json
         user_message = data.get('message', '')
 
         if not user_message:
             return jsonify({'error': 'No message provided'}), 400
+        
+        # Check if message is a greeting and return a response if true
+        greeting_response = is_greeting(user_message)
+        if greeting_response:
+            return jsonify({
+                'response': greeting_response,
+                'status': 'success'
+            })
+            
+        user_message = reformat_message(user_message)
 
         logging.info(f"Received message: {user_message}")
-
-        # Search for relevant documents
+        
         docs = vectorstore.similarity_search(user_message)
         logging.info("Similarity search completed.")
 
-        # Generate response
-        # response = qa_chain.run(input_documents=docs, question=user_message)
-        response = "there should be a response"
+        # response = "there should be a response"
+        # Generate a response (you can implement QA chain here if needed)
+        response = "\n".join(docs) if docs else "Could not find relevant sections in the code."
+
 
         return jsonify({
             'response': response,
@@ -132,10 +199,7 @@ def chat():
 
     except Exception as e:
         logging.error(f"Error in /api/chat: {e}")
-        return jsonify({
-            'error': str(e),
-            'status': 'error'
-        }), 500
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health_check():

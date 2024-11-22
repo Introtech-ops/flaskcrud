@@ -22,7 +22,7 @@ llama_model = AutoModelForCausalLM.from_pretrained(llama_model_name)
 logging.info("Loading SentenceTransformer for embeddings...")
 
 # hf_token = "your_huggingface_api_token"
-hf_token = "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"
+hf_token = ""
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 

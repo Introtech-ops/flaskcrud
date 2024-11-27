@@ -13,6 +13,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 import pdfplumber
+import PyPDF2
 import os
 import logging
 import getpass
@@ -48,6 +49,55 @@ greetings_dict = {
     'sasa': 'Sasa! Do you have any questions for me?',
     'rieng': 'Rieng! Let me know how I can help you.'
 }
+
+def search_pdf(search_text):
+    try:
+        # Open the PDF file in read-binary mode
+        with open('ncabc140.pdf', 'rb') as pdf_file:
+            # Create a PDF reader object
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            results = []
+
+            # Iterate through each page in the PDF
+            for page_number, page in enumerate(pdf_reader.pages, start=1):
+                text = page.extract_text()  # Extract text from the page
+                if search_text.lower() in text.lower():
+                    results.append((page_number, text.strip()))
+
+            if results:
+                print(f"The term '{search_text}' was found in the following pages:\n")
+                for page_number, context in results:
+                    print(f"Page {page_number}:\n")
+                    print(context[:500] + '...\n')  # Print a snippet of the context
+            else:
+                print(f"The term '{search_text}' was not found in the document.")
+    except FileNotFoundError:
+        print("The specified file was not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        
+        
+def extract_context_from_pdf(search_text):
+    """
+    Searches for a specific text in a PDF and returns matching contexts.
+    """
+    try:
+        with open('ncabcall.pdf', 'rb') as pdf_file:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            results = []
+
+            # Iterate through pages to find the search text
+            for page_number, page in enumerate(pdf_reader.pages, start=1):
+                text = page.extract_text()
+                if search_text.lower() in text.lower():
+                    results.append({'page': page_number, 'content': text.strip()[:500] + '...'})
+
+            return results
+    except FileNotFoundError:
+        raise FileNotFoundError("The specified file was not found.")
+    except Exception as e:
+        raise Exception(f"An error occurred while processing the PDF: {e}")
+
 
 ## Function to check if the message contains a greeting and return a unique response
 def is_greeting(message):
@@ -141,16 +191,6 @@ def reinitialize_system():
         logging.error(f"Reinitialization failed: {e}")
         return None
 
-# try:
-#     nbc_content = load_nbc_content()
-#     text_splitter = initialize_text_splitter()
-#     chunks = text_splitter.split_text(nbc_content)
-#     _cache['text_chunks'] = chunks
-#     vectorstore = create_vector_store(chunks)
-#     qa_chain = initialize_qa_chain()
-# except Exception as e:
-#     logging.error(f"Initialization failed: {e}")
-    
 @app.route('/api/chat', methods=['POST'])
 def chat():
     try:
@@ -206,6 +246,37 @@ def health_check():
     return jsonify({'status': 'healthy', 'message': 'Building Code LLM is running'})
 
 
+@app.route('/api/getcontext', methods=['POST'])
+def get_context():
+    try:
+        if not request.is_json:
+            return jsonify({'error': 'Content-Type must be application/json'}), 415
+        
+        data = request.json
+        search_text = data.get('search_text', '')
+
+        if not search_text:
+            return jsonify({'error': 'Both pdf_path and search_text are required.'}), 400
+        
+        logging.info(f"Searching for '{search_text}' in PDF: ncabcall.pdf")
+        results = extract_context_from_pdf(search_text)
+
+        if not results:
+            return jsonify({'response': 'No matching text found in the document.', 'status': 'success'})
+        
+        logging.info(f"{results}")
+
+        return jsonify({
+            'response': results,
+            'status': 'success'
+        })
+
+    except FileNotFoundError as fnf_error:
+        logging.error(f"File error: {fnf_error}")
+        return jsonify({'error': str(fnf_error), 'status': 'error'}), 404
+    except Exception as e:
+        logging.error(f"Error in /api/getcontext: {e}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 # Error handling
 @app.errorhandler(404)
@@ -218,3 +289,5 @@ def server_error(e):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+    
+  

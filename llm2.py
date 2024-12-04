@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 # Load Llama model and tokenizer
 logging.info("Loading Llama model and tokenizer...")
-llama_model_name = "meta-llama/Llama-2-7b-hf"  # Adjust this to the Llama model you're using
+llama_model_name = "meta-llama/Llama-2-7b-hf"  
 tokenizer = AutoTokenizer.from_pretrained(llama_model_name)
 llama_model = AutoModelForCausalLM.from_pretrained(llama_model_name)
 

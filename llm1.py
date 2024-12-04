@@ -137,11 +137,7 @@ def load_nbc_content(pdf_path="ncabc140.pdf"):
         logging.error(f"Failed to load PDF: {e}")
         raise
 
-def create_vector_store(text_chunks):
-    # if _cache['vectorstore']:
-    #     logging.info("Using cached vector store.")
-    #     return _cache['vectorstore']
-    
+def create_vector_store(text_chunks):    
     logging.info("Creating new vector store...")
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
@@ -190,6 +186,10 @@ def reinitialize_system():
     except Exception as e:
         logging.error(f"Reinitialization failed: {e}")
         return None
+
+@app.route('/')
+def health_chck():
+    return jsonify({'status': 'healthy', 'message': 'Building Code LLM is running'})
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -254,7 +254,7 @@ def get_context():
         
         data = request.json
         search_text = data.get('search_text', '')
-
+        
         if not search_text:
             return jsonify({'error': 'Both pdf_path and search_text are required.'}), 400
         
@@ -265,7 +265,7 @@ def get_context():
             return jsonify({'response': 'No matching text found in the document.', 'status': 'success'})
         
         logging.info(f"{results}")
-
+        
         return jsonify({
             'response': results,
             'status': 'success'
@@ -288,6 +288,6 @@ def server_error(e):
     return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5050, debug=True)
     
   
